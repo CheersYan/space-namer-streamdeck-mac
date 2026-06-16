@@ -30,7 +30,7 @@ const util = require("node:util");
 
 const execFileAsync = util.promisify(execFile);
 
-const PLUGIN_UUID = "dev.gpt.spacenamer";
+const PLUGIN_UUID = "cheersyan.gpt.spacenamer";
 const ACTION_PREFIX = `${PLUGIN_UUID}.desktop.`;
 const ACTION_REFRESH = `${PLUGIN_UUID}.refresh`;
 const ACTION_NAME_ALL = `${PLUGIN_UUID}.name-all`;
@@ -385,7 +385,7 @@ function saveSessionStore() {
   try {
     const tmp = `${sessionPath}.${process.pid}.tmp`;
     const data = {
-      note: "Temporary per-macOS-boot labels for dev.gpt.spacenamer. Safe to delete.",
+      note: "Temporary per-macOS-boot labels for cheersyan.gpt.spacenamer. Safe to delete.",
       updatedAt: new Date().toISOString(),
       names: Object.fromEntries(sessionNames),
     };

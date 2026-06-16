@@ -12,7 +12,7 @@ Space Namer Lite is a macOS-only Stream Deck plugin for temporary session names 
 
 ## Install
 
-Open `dist/dev.gpt.spacenamer.streamDeckPlugin` to install the packaged plugin in Stream Deck.
+Open `dist/cheersyan.gpt.spacenamer.streamDeckPlugin` to install the packaged plugin in Stream Deck.
 
 The plugin requires:
 
@@ -26,7 +26,7 @@ macOS may require Accessibility permission for Stream Deck so the plugin can tri
 
 ## Development
 
-The plugin source lives in `dev.gpt.spacenamer.sdPlugin`.
+The plugin source lives in `cheersyan.gpt.spacenamer.sdPlugin`.
 
 To rebuild the installable archive:
 

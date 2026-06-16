@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PLUGIN_DIR="dev.gpt.spacenamer.sdPlugin"
+PLUGIN_DIR="cheersyan.gpt.spacenamer.sdPlugin"
 OUT_DIR="$ROOT_DIR/dist"
-OUT_FILE="$OUT_DIR/dev.gpt.spacenamer.streamDeckPlugin"
+OUT_FILE="$OUT_DIR/cheersyan.gpt.spacenamer.streamDeckPlugin"
 
 mkdir -p "$OUT_DIR"
 tmp_dir="$(mktemp -d "$OUT_DIR/.package.XXXXXX")"
-tmp_file="$tmp_dir/dev.gpt.spacenamer.streamDeckPlugin"
+tmp_file="$tmp_dir/cheersyan.gpt.spacenamer.streamDeckPlugin"
 
 (
   cd "$ROOT_DIR"
