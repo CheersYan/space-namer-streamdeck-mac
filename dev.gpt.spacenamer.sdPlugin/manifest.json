@@ -1,0 +1,317 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "dev.gpt.spacenamer",
+  "Name": "Space Namer Lite",
+  "Version": "0.2.0.0",
+  "Author": "CheersYan",
+  "Actions": [
+    {
+      "Name": "Desktop 1",
+      "UUID": "dev.gpt.spacenamer.desktop.1",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 1 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 2",
+      "UUID": "dev.gpt.spacenamer.desktop.2",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 2 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 3",
+      "UUID": "dev.gpt.spacenamer.desktop.3",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 3 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 4",
+      "UUID": "dev.gpt.spacenamer.desktop.4",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 4 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 5",
+      "UUID": "dev.gpt.spacenamer.desktop.5",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 5 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 6",
+      "UUID": "dev.gpt.spacenamer.desktop.6",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 6 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 7",
+      "UUID": "dev.gpt.spacenamer.desktop.7",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 7 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 8",
+      "UUID": "dev.gpt.spacenamer.desktop.8",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 8 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 9",
+      "UUID": "dev.gpt.spacenamer.desktop.9",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 9 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 10",
+      "UUID": "dev.gpt.spacenamer.desktop.10",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 10 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 11",
+      "UUID": "dev.gpt.spacenamer.desktop.11",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 11 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 12",
+      "UUID": "dev.gpt.spacenamer.desktop.12",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 12 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 13",
+      "UUID": "dev.gpt.spacenamer.desktop.13",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 13 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 14",
+      "UUID": "dev.gpt.spacenamer.desktop.14",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 14 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 15",
+      "UUID": "dev.gpt.spacenamer.desktop.15",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 15 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Desktop 16",
+      "UUID": "dev.gpt.spacenamer.desktop.16",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Tap to switch to desktop slot 16 using macOS Control-Arrow navigation. Hold for a moment to rename it for this macOS boot session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Name Desktops",
+      "UUID": "dev.gpt.spacenamer.name-all",
+      "Icon": "imgs/actions/utility/name-icon",
+      "Tooltip": "Prompt for temporary session names for every detected desktop.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/utility/name-key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
+      "Name": "Refresh Spaces",
+      "UUID": "dev.gpt.spacenamer.refresh",
+      "Icon": "imgs/actions/utility/refresh-icon",
+      "Tooltip": "Refresh the detected macOS desktop list from the native Spaces plist.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/utility/refresh-key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    }
+  ],
+  "Category": "Space Namer Lite",
+  "CategoryIcon": "imgs/plugin/category-icon",
+  "CodePath": "bin/plugin.js",
+  "Description": "Session-only labels and desktop switching for macOS Spaces with no external Spaces backend dependency.",
+  "Icon": "imgs/plugin/marketplace",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "Nodejs": {
+    "Version": "20"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    }
+  ],
+  "URL": "https://github.com/CheersYan/space-namer-streamdeck-mac",
+  "SupportURL": "https://github.com/CheersYan/space-namer-streamdeck-mac/issues"
+}
