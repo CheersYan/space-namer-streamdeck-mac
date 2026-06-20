@@ -16,6 +16,7 @@
  * - Built without npm dependencies so the .sdPlugin can be installed directly.
  * - Uses Node's built-in WebSocket when available, with a small Node 20 fallback.
  * - Uses /usr/bin/plutil to read the Spaces plist.
+ * - Uses the bundled spacectl helper to read the live active Space from SkyLight.
  * - Uses /usr/bin/osascript for prompts and Control-arrow key events.
  */
 
@@ -34,21 +35,31 @@ const PLUGIN_UUID = "cheersyan.gpt.spacenamer";
 const ACTION_PREFIX = `${PLUGIN_UUID}.desktop.`;
 const ACTION_REFRESH = `${PLUGIN_UUID}.refresh`;
 const ACTION_NAME_ALL = `${PLUGIN_UUID}.name-all`;
+const ACTION_CURRENT = `${PLUGIN_UUID}.current`;
 
 const POLL_INTERVAL_MS = 2000;
+const CURRENT_DISPLAY_INTERVAL_MS = 500;
 const LONG_PRESS_MS = 850;
-const SWITCH_STEP_DELAY_MS = 260;
+const SPACE_SWITCH_TIMEOUT_MS = 2500;
+const SPACE_STALE_PLIST_TIMEOUT_MS = 650;
+const SPACE_SWITCH_POLL_MS = 80;
 const MAX_DESKTOP_ACTIONS = 16;
 const LOG_DIR = path.resolve(__dirname, "..", "logs");
 const LOG_FILE = path.join(LOG_DIR, "plugin.log");
 const SPACE_PLIST = path.join(os.homedir(), "Library", "Preferences", "com.apple.spaces.plist");
+const SPACECTL = path.join(__dirname, "spacectl");
 
 let ws = null;
 let topology = emptyTopology();
 let spaces = []; // Normal desktop spaces for Stream Deck keys, derived from topology.normalSpaces.
 let sessionNames = new Map();
 let contexts = new Map();
-let scanInProgress = false;
+let scanPromise = null;
+let currentDisplayPromise = null;
+let currentDisplayTimer = null;
+let switchQueue = Promise.resolve();
+let predictedCurrentSpaceId = null;
+let stalePlistSpaceId = null;
 let hasScanned = false;
 let lastError = null;
 let promptQueue = Promise.resolve();
@@ -61,6 +72,7 @@ function emptyTopology() {
     currentSpaceId: null,
     allSpaces: [],
     normalSpaces: [],
+    activeManagedId: null,
     monitorCount: 0,
     plistPath: SPACE_PLIST,
   };
@@ -349,6 +361,17 @@ async function runPlutilJson(plistPath) {
   return JSON.parse(stdout);
 }
 
+async function getActiveManagedSpaceId() {
+  const { stdout } = await execFileAsync(SPACECTL, ["active"], {
+    timeout: 1000,
+    maxBuffer: 64 * 1024,
+  });
+
+  const id = stdout.trim();
+  if (!/^[1-9]\d*$/.test(id)) throw new Error(`Invalid active Space ID: ${id}`);
+  return id;
+}
+
 async function getBootSessionId() {
   try {
     const { stdout } = await execFileAsync("/usr/sbin/sysctl", ["-n", "kern.boottime"], {
@@ -403,6 +426,12 @@ function asArray(value) {
 function normalizeUuid(value) {
   const out = String(value || "").trim();
   return out || null;
+}
+
+function managedSpaceIdFor(space) {
+  const id = space && space.managedId;
+  if (id === undefined || id === null || id === "") return null;
+  return String(id);
 }
 
 function isWallSpace(space) {
@@ -533,6 +562,33 @@ async function getAllSpaces() {
   return parseSpacesPlist(plist, SPACE_PLIST);
 }
 
+async function applyLiveCurrentSpace(topologySnapshot) {
+  let activeManagedId = null;
+
+  try {
+    activeManagedId = await getActiveManagedSpaceId();
+  } catch (err) {
+    log("SkyLight active Space read failed; falling back to plist", String(err && err.message ? err.message : err));
+    return topologySnapshot;
+  }
+
+  const activeSpace = topologySnapshot.allSpaces.find((space) => managedSpaceIdFor(space) === activeManagedId);
+
+  if (!activeSpace) {
+    log("SkyLight active Space did not map to plist topology", {
+      activeManagedId,
+      knownManagedIds: topologySnapshot.allSpaces.map((space) => space.managedId),
+    });
+    return topologySnapshot;
+  }
+
+  return {
+    ...topologySnapshot,
+    currentSpaceId: activeSpace.id,
+    activeManagedId,
+  };
+}
+
 function isProbablyDefaultDesktopName(name) {
   return /^desktop\s*\d+$/i.test(String(name || "").trim()) || /^space\s*\d+$/i.test(String(name || "").trim());
 }
@@ -572,6 +628,12 @@ function wrapLabel(label) {
   return `${first}\n${second}`;
 }
 
+function compactLabel(label) {
+  const clean = String(label || "").trim().replace(/\s+/g, " ");
+  if (clean.length <= 13) return clean;
+  return `${clean.slice(0, 10)}...`;
+}
+
 function spaceForSlot(slot) {
   return spaces[slot - 1] || null;
 }
@@ -588,9 +650,21 @@ function titleForSlot(slot) {
   return `D${slot}\n${wrapLabel(labelForSpace(space, slot))}`;
 }
 
+function titleForCurrentSpace() {
+  if (lastError) return "Current\nError";
+
+  const currentSpaceId = currentSpaceIdForSwitch(topology);
+  const slot = currentSpaceId ? slotForSpaceId(currentSpaceId) : null;
+  if (!slot) return "Current\n(?)";
+
+  const space = spaceForSlot(slot);
+  return `${compactLabel(labelForSpace(space, slot))}\n(${slot})`;
+}
+
 function titleForContext(ctx) {
   if (!ctx) return "";
   if (ctx.type === "desktop") return titleForSlot(ctx.slot);
+  if (ctx.type === "current") return titleForCurrentSpace();
   if (ctx.type === "refresh") return lastError ? "Retry\nSpaces" : "Refresh\nSpaces";
   if (ctx.type === "name-all") return "Name\nDesktops";
   return "";
@@ -602,7 +676,22 @@ function renderContext(context, ctx = contexts.get(context)) {
 }
 
 function renderAll() {
-  for (const [context, ctx] of contexts.entries()) renderContext(context, ctx);
+  for (const [context, ctx] of contexts.entries()) {
+    if (ctx.type !== "current") renderContext(context, ctx);
+  }
+}
+
+function renderCurrentContexts() {
+  for (const [context, ctx] of contexts.entries()) {
+    if (ctx.type === "current") renderContext(context, ctx);
+  }
+}
+
+function hasCurrentContexts() {
+  for (const ctx of contexts.values()) {
+    if (ctx.type === "current") return true;
+  }
+  return false;
 }
 
 async function promptForSpaceName(space, reason) {
@@ -653,13 +742,23 @@ function cleanupDeletedSpaces(currentSpaces) {
 }
 
 async function scanSpaces(options = {}) {
+  if (scanPromise) return scanPromise;
+
+  scanPromise = doScanSpaces(options)
+    .finally(() => {
+      scanPromise = null;
+    });
+
+  return scanPromise;
+}
+
+async function doScanSpaces(options = {}) {
   const { forcePromptNew = true } = options;
-  if (scanInProgress) return;
-  scanInProgress = true;
+
   try {
     const previousIds = new Set(spaces.map((space) => space.id));
     const firstScan = !hasScanned;
-    const nextTopology = await getAllSpaces();
+    const nextTopology = await refreshTopologyFromPlist();
     const nextSpaces = nextTopology.normalSpaces;
 
     cleanupDeletedSpaces(nextSpaces);
@@ -699,9 +798,39 @@ async function scanSpaces(options = {}) {
     lastError = String((err && (err.stderr || err.message)) || err || "Unknown error").trim();
     log("Scan failed", lastError);
     renderAll();
-  } finally {
-    scanInProgress = false;
   }
+}
+
+async function updateCurrentDisplay() {
+  if (!hasCurrentContexts()) return;
+  if (currentDisplayPromise) return currentDisplayPromise;
+
+  currentDisplayPromise = (async () => {
+    try {
+      const nextTopology = await refreshTopologyFromPlist();
+      topology = nextTopology;
+      spaces = nextTopology.normalSpaces;
+      lastError = null;
+      renderCurrentContexts();
+    } catch (err) {
+      const errorText = String((err && (err.stderr || err.message)) || err || "Unknown error").trim();
+      if (errorText !== lastError) log("Current display refresh failed", errorText);
+      lastError = errorText;
+      renderCurrentContexts();
+    }
+  })()
+    .finally(() => {
+      currentDisplayPromise = null;
+    });
+
+  return currentDisplayPromise;
+}
+
+function startCurrentDisplayPoll() {
+  if (currentDisplayTimer) return;
+  currentDisplayTimer = setInterval(() => {
+    updateCurrentDisplay().catch((err) => log("Current display poll failed", String(err && err.message ? err.message : err)));
+  }, CURRENT_DISPLAY_INTERVAL_MS);
 }
 
 async function renameSlot(slot, context) {
@@ -743,41 +872,261 @@ async function pressControlArrow(direction) {
   await runOsascript(script, 8000);
 }
 
-async function moveRelativeSpaces(stepCount) {
-  const count = Math.abs(stepCount);
-  const direction = stepCount > 0 ? "right" : "left";
-  for (let i = 0; i < count; i += 1) {
-    await pressControlArrow(direction);
-    if (i < count - 1) await sleep(SWITCH_STEP_DELAY_MS);
-  }
+function indexInSpacesList(topologySnapshot, spaceId) {
+  return topologySnapshot.allSpaces.findIndex((space) => space.id === spaceId);
 }
 
-function indexInAllSpaces(spaceId) {
-  return topology.allSpaces.findIndex((space) => space.id === spaceId);
+function currentSpaceIdForSwitch(topologySnapshot) {
+  if (!predictedCurrentSpaceId) return topologySnapshot.currentSpaceId;
+
+  if (indexInSpacesList(topologySnapshot, predictedCurrentSpaceId) < 0) {
+    log("Switch prediction cleared; predicted Space disappeared", {
+      predictedCurrentSpaceId,
+      plistCurrentSpaceId: topologySnapshot.currentSpaceId,
+    });
+    predictedCurrentSpaceId = null;
+    stalePlistSpaceId = null;
+    return topologySnapshot.currentSpaceId;
+  }
+
+  if (topologySnapshot.currentSpaceId === predictedCurrentSpaceId) {
+    log("Switch prediction confirmed by plist", {
+      currentSpaceId: topologySnapshot.currentSpaceId,
+    });
+    predictedCurrentSpaceId = null;
+    stalePlistSpaceId = null;
+    return topologySnapshot.currentSpaceId;
+  }
+
+  if (!topologySnapshot.currentSpaceId || topologySnapshot.currentSpaceId === stalePlistSpaceId) {
+    return predictedCurrentSpaceId;
+  }
+
+  log("Switch prediction cleared; plist moved independently", {
+    plistCurrentSpaceId: topologySnapshot.currentSpaceId,
+    predictedCurrentSpaceId,
+    stalePlistSpaceId,
+  });
+  predictedCurrentSpaceId = null;
+  stalePlistSpaceId = null;
+  return topologySnapshot.currentSpaceId;
+}
+
+async function refreshTopologyFromPlist() {
+  let nextTopology = await getAllSpaces();
+  nextTopology = await applyLiveCurrentSpace(nextTopology);
+
+  topology = nextTopology;
+  spaces = nextTopology.normalSpaces;
+  return nextTopology;
+}
+
+async function waitForActiveManagedSpaceUpdate(previousManagedId, targetManagedId, timeoutMs = SPACE_SWITCH_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  let latestManagedId = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      latestManagedId = await getActiveManagedSpaceId();
+
+      if (String(latestManagedId) === String(targetManagedId)) {
+        return latestManagedId;
+      }
+
+      if (
+        latestManagedId &&
+        previousManagedId &&
+        String(latestManagedId) !== String(previousManagedId)
+      ) {
+        return latestManagedId;
+      }
+    } catch (err) {
+      log("Active Space poll failed", String(err && err.message ? err.message : err));
+    }
+
+    await sleep(SPACE_SWITCH_POLL_MS);
+  }
+
+  return latestManagedId;
+}
+
+async function waitForCurrentSpaceUpdate(previousSpaceId, targetSpaceId, timeoutMs = SPACE_SWITCH_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  let latest = await refreshTopologyFromPlist();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (latest.currentSpaceId === targetSpaceId) return latest;
+
+    if (
+      latest.currentSpaceId &&
+      previousSpaceId &&
+      latest.currentSpaceId !== previousSpaceId
+    ) {
+      return latest;
+    }
+
+    await sleep(SPACE_SWITCH_POLL_MS);
+    latest = await refreshTopologyFromPlist();
+  }
+
+  return latest;
 }
 
 async function switchToSpace(space) {
+  const queuedSwitch = switchQueue.then(() => doSwitchToSpace(space));
+  switchQueue = queuedSwitch.catch(() => {});
+  return queuedSwitch;
+}
+
+async function doSwitchToSpace(space) {
   if (!space || !space.id) throw new Error("No space selected");
 
-  // Refresh immediately so currentSpaceId is as current as the plist allows.
-  topology = await getAllSpaces();
-  spaces = topology.normalSpaces;
+  const targetId = space.id;
+  let targetManagedId = managedSpaceIdFor(space);
+  let currentTopology = await refreshTopologyFromPlist();
+  let usingStalePlistFallback = Boolean(predictedCurrentSpaceId);
 
-  const currentIndex = indexInAllSpaces(topology.currentSpaceId);
-  const targetIndex = indexInAllSpaces(space.id);
+  const maxSteps = Math.max(4, currentTopology.allSpaces.length + 2);
 
-  if (targetIndex < 0) {
-    throw new Error("Target desktop is not in the current Spaces order. Press Refresh Spaces and try again.");
+  for (let attempt = 0; attempt < maxSteps; attempt += 1) {
+    currentTopology = await refreshTopologyFromPlist();
+    const effectiveCurrentId = currentSpaceIdForSwitch(currentTopology);
+
+    if (effectiveCurrentId === targetId) {
+      if (predictedCurrentSpaceId === targetId && currentTopology.currentSpaceId !== targetId) {
+        log("Switch reached target using predicted Space state", {
+          targetId,
+          plistCurrentSpaceId: currentTopology.currentSpaceId,
+          stalePlistSpaceId,
+        });
+      }
+      renderAll();
+      return;
+    }
+
+    const currentIndex = indexInSpacesList(currentTopology, effectiveCurrentId);
+    const targetIndex = indexInSpacesList(currentTopology, targetId);
+    const effectiveCurrent = currentTopology.allSpaces.find((s) => String(s.id) === String(effectiveCurrentId));
+    const targetSpace = currentTopology.allSpaces.find((s) => String(s.id) === String(targetId));
+    if (targetSpace) targetManagedId = managedSpaceIdFor(targetSpace);
+
+    if (targetIndex < 0) {
+      throw new Error("Target desktop is not in the current Spaces order. Refresh Spaces and try again.");
+    }
+
+    if (currentIndex < 0) {
+      throw new Error("Current Space is not visible in the Spaces plist yet. Leave Mission Control/full screen, then try again.");
+    }
+
+    const direction = targetIndex > currentIndex ? "right" : "left";
+    const beforeId = effectiveCurrentId;
+    const plistBeforeId = currentTopology.currentSpaceId;
+    const beforeManagedId = managedSpaceIdFor(effectiveCurrent);
+    const liveActiveAvailable = Boolean(currentTopology.activeManagedId);
+
+    if (liveActiveAvailable && !targetManagedId) {
+      throw new Error("Target desktop does not have a managed Space ID. Refresh Spaces and try again.");
+    }
+
+    log("Switch step", {
+      attempt,
+      displayId: currentTopology.displayId,
+      direction,
+      beforeId,
+      plistBeforeId,
+      predictedCurrentSpaceId,
+      targetId,
+      beforeManagedId,
+      targetManagedId,
+      liveActiveAvailable,
+      currentIndex,
+      targetIndex,
+      usingStalePlistFallback,
+      allSpaces: currentTopology.allSpaces.map((s) => ({
+        id: s.id,
+        order: s.order,
+        type: s.type,
+        normal: s.isNormalDesktop,
+      })),
+    });
+
+    await pressControlArrow(direction);
+
+    if (liveActiveAvailable) {
+      const activeAfter = await waitForActiveManagedSpaceUpdate(
+        beforeManagedId,
+        targetManagedId,
+        usingStalePlistFallback ? SPACE_STALE_PLIST_TIMEOUT_MS : SPACE_SWITCH_TIMEOUT_MS
+      );
+
+      if (String(activeAfter) === String(targetManagedId)) {
+        predictedCurrentSpaceId = null;
+        stalePlistSpaceId = null;
+        await refreshTopologyFromPlist();
+        renderAll();
+        return;
+      }
+
+      currentTopology = await refreshTopologyFromPlist();
+    } else {
+      currentTopology = await waitForCurrentSpaceUpdate(
+        plistBeforeId,
+        targetId,
+        usingStalePlistFallback ? SPACE_STALE_PLIST_TIMEOUT_MS : SPACE_SWITCH_TIMEOUT_MS
+      );
+    }
+
+    if (currentTopology.currentSpaceId && currentTopology.currentSpaceId !== plistBeforeId) {
+      if (predictedCurrentSpaceId) {
+        log("Switch prediction cleared; plist changed after step", {
+          plistCurrentSpaceId: currentTopology.currentSpaceId,
+          predictedCurrentSpaceId,
+        });
+      }
+      predictedCurrentSpaceId = null;
+      stalePlistSpaceId = null;
+      usingStalePlistFallback = false;
+      continue;
+    }
+
+    if (currentTopology.currentSpaceId === plistBeforeId || !currentTopology.currentSpaceId) {
+      if (!usingStalePlistFallback) {
+        await sleep(350);
+        currentTopology = await refreshTopologyFromPlist();
+
+        if (currentTopology.currentSpaceId && currentTopology.currentSpaceId !== plistBeforeId) {
+          predictedCurrentSpaceId = null;
+          stalePlistSpaceId = null;
+          continue;
+        }
+      }
+
+      const predictedIndex = currentIndex + (direction === "right" ? 1 : -1);
+      const predictedSpace = currentTopology.allSpaces[predictedIndex];
+
+      if (!predictedSpace) {
+        throw new Error(
+          `macOS did not report a Space change after Control-${direction}, and no predicted Space exists in that direction. Check Mission Control shortcuts and Accessibility permissions.`
+        );
+      }
+
+      predictedCurrentSpaceId = predictedSpace.id;
+      stalePlistSpaceId = currentTopology.currentSpaceId || plistBeforeId || stalePlistSpaceId;
+      usingStalePlistFallback = true;
+
+      log("Switch plist stale; continuing with predicted current Space", {
+        direction,
+        beforeId,
+        predictedCurrentSpaceId,
+        predictedIndex,
+        targetId,
+        plistCurrentSpaceId: currentTopology.currentSpaceId,
+        stalePlistSpaceId,
+      });
+    }
   }
-  if (currentIndex < 0) {
-    throw new Error("Current Space is not visible in the Spaces plist yet. Press Refresh Spaces after leaving full screen or Mission Control.");
-  }
 
-  const delta = targetIndex - currentIndex;
-  if (delta === 0) return;
-  await moveRelativeSpaces(delta);
-  await sleep(350);
-  await scanSpaces({ forcePromptNew: false });
+  throw new Error("Could not reach the target desktop after verified Space steps.");
 }
 
 async function switchSlot(slot, context) {
@@ -804,6 +1153,10 @@ function handleWillAppear(message) {
     contexts.set(message.context, { type: "refresh" });
   } else if (message.action === ACTION_NAME_ALL) {
     contexts.set(message.context, { type: "name-all" });
+  } else if (message.action === ACTION_CURRENT) {
+    contexts.set(message.context, { type: "current" });
+    startCurrentDisplayPoll();
+    updateCurrentDisplay().catch((err) => log("Current display initial refresh failed", String(err && err.message ? err.message : err)));
   }
   renderContext(message.context);
 }
@@ -894,6 +1247,7 @@ function handleMessage(raw) {
 async function start() {
   await initSessionStore();
   await scanSpaces({ forcePromptNew: false });
+  startCurrentDisplayPoll();
   setInterval(() => {
     scanSpaces({ forcePromptNew: true }).catch((err) => log("Interval scan failed", String(err && err.message ? err.message : err)));
   }, POLL_INTERVAL_MS);

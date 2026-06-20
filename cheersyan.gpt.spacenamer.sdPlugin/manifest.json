@@ -262,6 +262,22 @@
       ]
     },
     {
+      "Name": "Current Desktop",
+      "UUID": "cheersyan.gpt.spacenamer.current",
+      "Icon": "imgs/actions/desktop/icon",
+      "Tooltip": "Show the plugin's current desktop estimate without switching Spaces.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/desktop/key",
+          "TitleAlignment": "middle",
+          "FontSize": 14
+        }
+      ]
+    },
+    {
       "Name": "Name Desktops",
       "UUID": "cheersyan.gpt.spacenamer.name-all",
       "Icon": "imgs/actions/utility/name-icon",

@@ -5,8 +5,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_DIR="cheersyan.gpt.spacenamer.sdPlugin"
 OUT_DIR="$ROOT_DIR/dist"
 OUT_FILE="$OUT_DIR/cheersyan.gpt.spacenamer.streamDeckPlugin"
+SPACECTL_SRC="$ROOT_DIR/src/spacectl.m"
+SPACECTL_BIN="$ROOT_DIR/$PLUGIN_DIR/bin/spacectl"
 
 mkdir -p "$OUT_DIR"
+xcrun clang -ObjC -fobjc-arc \
+  -framework Foundation \
+  -F/System/Library/PrivateFrameworks \
+  -framework SkyLight \
+  "$SPACECTL_SRC" \
+  -o "$SPACECTL_BIN"
+chmod 755 "$SPACECTL_BIN"
+
 tmp_dir="$(mktemp -d "$OUT_DIR/.package.XXXXXX")"
 tmp_file="$tmp_dir/cheersyan.gpt.spacenamer.streamDeckPlugin"
 
