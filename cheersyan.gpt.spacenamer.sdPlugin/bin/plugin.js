@@ -44,6 +44,7 @@ const SPACE_SWITCH_TIMEOUT_MS = 2500;
 const SPACE_STALE_PLIST_TIMEOUT_MS = 650;
 const SPACE_SWITCH_POLL_MS = 80;
 const MAX_DESKTOP_ACTIONS = 16;
+const LOG_REPEAT_SUPPRESS_MS = 60000;
 const LOG_DIR = path.resolve(__dirname, "..", "logs");
 const LOG_FILE = path.join(LOG_DIR, "plugin.log");
 const SPACE_PLIST = path.join(os.homedir(), "Library", "Preferences", "com.apple.spaces.plist");
@@ -64,6 +65,8 @@ let hasScanned = false;
 let lastError = null;
 let promptQueue = Promise.resolve();
 let sessionPath = null;
+let lastSavedSessionNamesJson = null;
+let recentLogEntries = new Map();
 
 function emptyTopology() {
   return {
@@ -84,8 +87,21 @@ function sleep(ms) {
 
 function log(message, extra) {
   try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
     const suffix = extra === undefined ? "" : ` ${typeof extra === "string" ? extra : JSON.stringify(extra)}`;
+    const entryKey = `${message}${suffix}`;
+    const now = Date.now();
+    const lastLoggedAt = recentLogEntries.get(entryKey);
+
+    if (lastLoggedAt && now - lastLoggedAt < LOG_REPEAT_SUPPRESS_MS) return;
+
+    recentLogEntries.set(entryKey, now);
+    if (recentLogEntries.size > 100) {
+      for (const [key, loggedAt] of recentLogEntries.entries()) {
+        if (now - loggedAt >= LOG_REPEAT_SUPPRESS_MS) recentLogEntries.delete(key);
+      }
+    }
+
+    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${message}${suffix}\n`, "utf8");
   } catch {
     // Logging should never break the plugin.
@@ -401,22 +417,48 @@ async function initSessionStore() {
   } catch (err) {
     log("Unable to load session file", String(err && err.message ? err.message : err));
   }
+  lastSavedSessionNamesJson = sessionNamesJson();
 }
 
 function saveSessionStore() {
   if (!sessionPath) return;
   try {
+    const nextSessionNamesJson = sessionNamesJson();
+    if (nextSessionNamesJson === lastSavedSessionNamesJson) return false;
+
     const tmp = `${sessionPath}.${process.pid}.tmp`;
     const data = {
       note: "Temporary per-macOS-boot labels for cheersyan.gpt.spacenamer. Safe to delete.",
       updatedAt: new Date().toISOString(),
-      names: Object.fromEntries(sessionNames),
+      names: JSON.parse(nextSessionNamesJson),
     };
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
     fs.renameSync(tmp, sessionPath);
+    lastSavedSessionNamesJson = nextSessionNamesJson;
+    return true;
   } catch (err) {
     log("Unable to save session file", String(err && err.message ? err.message : err));
   }
+  return false;
+}
+
+function sessionNamesObject() {
+  const entries = Array.from(sessionNames.entries())
+    .sort(([left], [right]) => String(left).localeCompare(String(right)));
+  return Object.fromEntries(entries);
+}
+
+function sessionNamesJson() {
+  return JSON.stringify(sessionNamesObject());
+}
+
+function setSessionName(spaceId, name) {
+  if (!spaceId) return false;
+  const nextName = String(name || "").trim();
+  if (!nextName) return false;
+  if (sessionNames.get(spaceId) === nextName) return false;
+  sessionNames.set(spaceId, nextName);
+  return true;
 }
 
 function asArray(value) {
@@ -738,7 +780,7 @@ function cleanupDeletedSpaces(currentSpaces) {
       changed = true;
     }
   }
-  if (changed) saveSessionStore();
+  return changed;
 }
 
 async function scanSpaces(options = {}) {
@@ -761,13 +803,13 @@ async function doScanSpaces(options = {}) {
     const nextTopology = await refreshTopologyFromPlist();
     const nextSpaces = nextTopology.normalSpaces;
 
-    cleanupDeletedSpaces(nextSpaces);
+    let sessionChanged = cleanupDeletedSpaces(nextSpaces);
 
     for (let i = 0; i < nextSpaces.length; i += 1) {
       const space = nextSpaces[i];
       const slot = i + 1;
       if (!sessionNames.has(space.id)) {
-        sessionNames.set(space.id, defaultLabelForSpace(space, slot));
+        sessionChanged = setSessionName(space.id, defaultLabelForSpace(space, slot)) || sessionChanged;
       }
     }
 
@@ -775,7 +817,7 @@ async function doScanSpaces(options = {}) {
     spaces = nextSpaces;
     hasScanned = true;
     lastError = null;
-    saveSessionStore();
+    if (sessionChanged) saveSessionStore();
     renderAll();
 
     const created = spaces.filter((space) => !previousIds.has(space.id));
@@ -784,12 +826,13 @@ async function doScanSpaces(options = {}) {
         enqueuePrompt(async () => {
           const currentSlot = slotForSpaceId(createdSpace.id) || createdSpace.number || 1;
           const answer = await promptForSpaceName(createdSpace, "created");
+          let sessionChanged = false;
           if (answer) {
-            sessionNames.set(createdSpace.id, answer);
+            sessionChanged = setSessionName(createdSpace.id, answer);
           } else if (!sessionNames.get(createdSpace.id)) {
-            sessionNames.set(createdSpace.id, defaultLabelForSpace(createdSpace, currentSlot));
+            sessionChanged = setSessionName(createdSpace.id, defaultLabelForSpace(createdSpace, currentSlot));
           }
-          saveSessionStore();
+          if (sessionChanged) saveSessionStore();
           renderAll();
         });
       }
@@ -842,9 +885,10 @@ async function renameSlot(slot, context) {
   }
   const answer = await promptForSpaceName(space, "manual");
   if (answer) {
-    sessionNames.set(space.id, answer);
-    saveSessionStore();
-    renderAll();
+    if (setSessionName(space.id, answer)) {
+      saveSessionStore();
+      renderAll();
+    }
     showOk(context);
   } else {
     showAlert(context);
@@ -859,9 +903,10 @@ async function nameAllSpaces(context) {
   }
   for (const space of spaces) {
     const answer = await promptForSpaceName(space, "manual");
-    if (answer) sessionNames.set(space.id, answer);
-    saveSessionStore();
-    renderAll();
+    if (answer && setSessionName(space.id, answer)) {
+      saveSessionStore();
+      renderAll();
+    }
   }
   showOk(context);
 }
